@@ -1,5 +1,9 @@
 misc
 .antlr
+*.log
+.attach*
+.idea
+target/
 
 SimC.interp
 SimC.tokens
