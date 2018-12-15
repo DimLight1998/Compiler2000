@@ -44,9 +44,9 @@ int ComputeNext(int *next, char *str)
 
 int main()
 {
-    char source[1 << 16];
-    char pattern[1 << 10];
-    int next[1 << 10];
+    char source[65536];
+    char pattern[1024];
+    int next[1024];
     printf("Please input the source string (shorter than 2^16 chars):\n");
     scanf("%[^\n]", source);
     printf("Please input the pattern string (shorter than 2^10 chars):\n");

@@ -19,10 +19,15 @@ expression:
 	| expression op = ('==' | '!=') expression				# equalityExpr
 	| expression '&&' expression							# logicalAndExpr
 	| expression '||' expression							# logicalOrExpr
-	| expression '=' expression								# assignmentExpr;
+	| <assoc = right> expression '=' expression				# assignmentExpr;
 
 declaration:
-	typeSpecifier directDeclarator ';' # abstractDeclaration;
+	typeSpecifier Identifier ';'					# variableDeclaration
+	| typeSpecifier Identifier '[' Constant ']' ';'	# arrayDeclaration
+	| functionSignature ';'							# functionDeclaration;
+
+functionSignature:
+	typeSpecifier Identifier '(' parameterTypeList? ')' # functionSignatureHeader;
 
 typeSpecifier:
 	'char' '*'	# charPointerType
@@ -31,18 +36,13 @@ typeSpecifier:
 	| 'char'	# charType
 	| 'int'		# intType;
 
-directDeclarator:
-	Identifier										# variableDeclarator
-	| directDeclarator '[' expression? ']'			# arrayDeclarator
-	| directDeclarator '(' parameterTypeList? ')'	# functionPrototypeDeclarator;
-
 parameterTypeList:
 	parameterList				# simpleParameterList
 	| parameterList ',' '...'	# variableParameterList;
 
 parameterList:
-	typeSpecifier directDeclarator						# headParameter
-	| parameterList ',' typeSpecifier directDeclarator	# tailParameter;
+	typeSpecifier Identifier						# headParameter
+	| parameterList ',' typeSpecifier Identifier	# tailParameter;
 
 statement:
 	'{' blockItemList? '}'													# compoundStatement
@@ -70,7 +70,7 @@ externalDeclaration:
 	| declaration		# externalNonFunctionDefinition;
 
 functionDefinition:
-	typeSpecifier directDeclarator '{' blockItemList? '}' # functionFullDefinition;
+	functionSignature '{' blockItemList? '}' # functionFullDefinition;
 
 // LEXER
 Identifier: [a-zA-Z_] ([a-zA-Z_0-9])*;

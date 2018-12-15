@@ -13,3 +13,9 @@ SimCLexer.java
 SimCLexer.tokens
 SimCParser.java
 SimCVisitor.java
+
+.classpath
+.project
+.settings
+*.bc
+*.ll

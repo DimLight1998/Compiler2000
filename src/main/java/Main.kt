@@ -1,5 +1,6 @@
 import org.antlr.v4.runtime.ANTLRInputStream
 import org.antlr.v4.runtime.CommonTokenStream
+import java.io.File
 import java.io.FileInputStream
 
 object Main {
@@ -21,5 +22,8 @@ object Main {
         val tree = parser.compilationUnit()
         val codeGenVisitor = SimCCodeGenVisitor()
         codeGenVisitor.visit(tree)
+        codeGenVisitor.writeIRCodeTo(File("tests/ir.ll").path)
+        codeGenVisitor.writeBitCodeTo(File("tests/bitCode.bc").path)
+        codeGenVisitor.dispose()
     }
 }

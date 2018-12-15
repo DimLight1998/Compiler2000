@@ -15,7 +15,7 @@ int StringLength(char *str)
 int main()
 {
     printf("Please input a string (shorter than 1024 chars):\n");
-    char input[1 << 10];
+    char input[1024];
     scanf("%[^\n]", input);
     int inputLen;
     inputLen = StringLength(input);

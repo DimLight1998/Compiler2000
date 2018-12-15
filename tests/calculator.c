@@ -76,15 +76,15 @@ int BinCalc(char op, int lhs, int rhs)
 
 int main()
 {
-    int numStack[1 << 10];
+    int numStack[1024];
     int numStackSize;
     numStackSize = 0;
 
-    int opStack[1 << 10];
+    int opStack[1024];
     int opStackSize;
     opStackSize = 0;
 
-    char buffer[1 << 16];
+    char buffer[65536];
     printf("Please input the string to calculate (shorter than 2^16 chars):\n");
     scanf("%[^\n]", buffer);
 
