@@ -3,6 +3,7 @@ misc
 *.log
 .attach*
 .idea
+*.s
 target/
 
 SimC.interp

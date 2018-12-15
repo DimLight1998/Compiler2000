@@ -28,18 +28,37 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
 
     override fun visitStringConstantExpr(ctx: SimCParser.StringConstantExprContext): LLVMValueRef? {
         val raw = ctx.text.substring(1, ctx.text.length - 1)
-        return LLVMBuildGlobalStringPtr(builder, raw, "global_string")
+        val data = raw.replace("\\n", "\n").replace("\\r", "\r").replace("\\'", "\'")
+                .replace("\\\"", "\"").replace("\\b", "\b").replace("\\t", "\t").replace("\\\\", "\\")
+        return LLVMBuildGlobalStringPtr(builder, data, "global_string")
     }
 
     override fun visitAssignmentExpr(ctx: SimCParser.AssignmentExprContext): LLVMValueRef? {
-        val lhs = visit(ctx.expression(0))
+        val lhs = visit(ctx.Identifier())
+        val rhs = visit(ctx.expression())
+
+        val variable = getVariablePointerByName(ctx.Identifier().text)
+        if (LLVMGetTypeKind(LLVMTypeOf(rhs)) == LLVMArrayTypeKind) {
+            val array = getVariablePointerByName(ctx.expression().text)
+            val indices = arrayOf(LLVMConstInt(LLVMInt32Type(), 0, 0))
+            val arrayHead = LLVMBuildInBoundsGEP(builder, array, PointerPointer(*indices), 1, "arr_ptr")
+            LLVMBuildStore(builder, rhs, arrayHead)
+        } else {
+            LLVMBuildStore(builder, rhs, variable)
+        }
+        return lhs
+    }
+
+    override fun visitArrayAssignmentExpr(ctx: SimCParser.ArrayAssignmentExprContext): LLVMValueRef? {
         val rhs = visit(ctx.expression(1))
 
-        // TODO add support for array
-        val lhsExpression = (ctx.expression(0) as SimCParser.IdentifierExprContext)
-        val variable = getVariablePointerByName(lhsExpression.Identifier().text)
-        LLVMBuildStore(builder, rhs, variable)
-        return lhs
+        val array = getVariablePointerByName(ctx.Identifier().text)
+        val value = visit(ctx.expression(0))
+        val indices = arrayOf(LLVMConstInt(LLVMInt32Type(), 0, 0), value)
+        val indexed = LLVMBuildInBoundsGEP(builder, array, PointerPointer(*indices), 2, "arr_ptr")
+
+        LLVMBuildStore(builder, rhs, indexed)
+        return rhs
     }
 
     override fun visitOrderExpr(ctx: SimCParser.OrderExprContext): LLVMValueRef? {
@@ -71,8 +90,12 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
     }
 
     override fun visitArrayIndexerExpr(ctx: SimCParser.ArrayIndexerExprContext): LLVMValueRef? {
-        // TODO
-        return super.visitArrayIndexerExpr(ctx)
+        val array = getVariablePointerByName(ctx.Identifier().text)
+        val value = visit(ctx.expression())!!
+        val name = ctx.Identifier().text
+        val indices = arrayOf(LLVMConstInt(LLVMInt32Type(), 0, 0), value)
+        val indexed = LLVMBuildInBoundsGEP(builder, array, PointerPointer(*indices), 2, "arr_ptr")
+        return LLVMBuildLoad(builder, indexed, "arr_${name}_load")
     }
 
     override fun visitParensExpr(ctx: SimCParser.ParensExprContext): LLVMValueRef? {
@@ -111,7 +134,7 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
     }
 
     override fun visitFunctionCallExpr(ctx: SimCParser.FunctionCallExprContext): LLVMValueRef? {
-        val function = LLVMGetNamedFunction(module, ctx.expression().text)
+        val function = LLVMGetNamedFunction(module, ctx.Identifier().text)
 
         // get parameters
         val parameters = ArrayList<LLVMValueRef>()
@@ -131,7 +154,7 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
 
         // the grammar is left recursive, so reverse the list
         return LLVMBuildCall(builder, function, PointerPointer(*parameters.reversed().toTypedArray()),
-                parameters.size, "${ctx.expression().text}_result"
+                parameters.size, "${ctx.Identifier().text}_result"
         )
     }
 
@@ -174,8 +197,16 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
     }
 
     override fun visitArrayDeclaration(ctx: SimCParser.ArrayDeclarationContext): LLVMValueRef? {
-        // TODO
-        return super.visitArrayDeclaration(ctx)
+        val baseType = getLLVMType(ctx.typeSpecifier())
+        val name = ctx.Identifier().text
+        val size = ctx.Constant().text.toInt()
+        val arrayType = LLVMArrayType(baseType, size)
+        if (name in namesChain.top().keys)
+            throw Exception("variable redefined")
+
+        val pointer = LLVMBuildAlloca(builder, arrayType, name)
+        namesChain.top()[name] = pointer
+        return null
     }
 
     override fun visitFunctionDeclaration(ctx: SimCParser.FunctionDeclarationContext): LLVMValueRef? {
@@ -319,10 +350,17 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
                 val type = getLLVMType(declaration.typeSpecifier())
                 val name = declaration.Identifier().text
                 val pointer = LLVMAddGlobal(module, type, name)
+                LLVMSetLinkage(pointer, LLVMPrivateLinkage)
                 namesChain.top()[name] = pointer
             }
             is SimCParser.ArrayDeclarationContext -> {
-                // TODO add support for arrays
+                val baseType = getLLVMType(declaration.typeSpecifier())
+                val name = declaration.Identifier().text
+                val size = declaration.Constant().text.toInt()
+                val arrayType = LLVMArrayType(baseType, size)
+                val array = LLVMAddGlobal(module, arrayType, name)
+                LLVMSetLinkage(array, LLVMPrivateLinkage)
+                namesChain.top()[name] = array
             }
             else -> {
                 visit(ctx.declaration())

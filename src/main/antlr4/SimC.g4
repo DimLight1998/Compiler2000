@@ -5,21 +5,22 @@ arguments:
     | arguments ',' expression # tailExpression;
 
 expression:
-    Identifier                                             # identifierExpr
-    | Constant                                             # numericalConstantExpr
-    | StringLiteral                                        # stringConstantExpr
-    | '(' expression ')'                                   # parensExpr
-    | expression '[' expression ']'                        # arrayIndexerExpr
-    | expression '(' arguments? ')'                        # functionCallExpr
-    | op = ('+' | '-' | '!') expression                    # unaryOpExpr
-    | expression op = ('*' | '/' | '%') expression         # mulDivExpr
-    | expression op = ('+' | '-') expression               # addSubExpr
-    | expression op = ('<<' | '>>') expression             # lshRshExpr
-    | expression op = ('<' | '>' | '<=' | '>=') expression # orderExpr
-    | expression op = ('==' | '!=') expression             # equalityExpr
-    | expression '&&' expression                           # logicalAndExpr
-    | expression '||' expression                           # logicalOrExpr
-    | <assoc = right> expression '=' expression            # assignmentExpr;
+    Identifier                                                     # identifierExpr
+    | Constant                                                     # numericalConstantExpr
+    | StringLiteral                                                # stringConstantExpr
+    | '(' expression ')'                                           # parensExpr
+    | Identifier '[' expression ']'                                # arrayIndexerExpr
+    | Identifier '(' arguments? ')'                                # functionCallExpr
+    | op = ('+' | '-' | '!') expression                            # unaryOpExpr
+    | expression op = ('*' | '/' | '%') expression                 # mulDivExpr
+    | expression op = ('+' | '-') expression                       # addSubExpr
+    | expression op = ('<<' | '>>') expression                     # lshRshExpr
+    | expression op = ('<' | '>' | '<=' | '>=') expression         # orderExpr
+    | expression op = ('==' | '!=') expression                     # equalityExpr
+    | expression '&&' expression                                   # logicalAndExpr
+    | expression '||' expression                                   # logicalOrExpr
+    | <assoc = right> Identifier '=' expression                    # assignmentExpr
+    | <assoc = right> Identifier '[' expression ']' '=' expression # arrayAssignmentExpr;
 
 declaration:
     typeSpecifier Identifier ';'                    # variableDeclaration
