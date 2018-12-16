@@ -1,5 +1,6 @@
 int printf(char *format, ...);
 int scanf(char *format, ...);
+char *memset(char *ptr, int value, int num);
 
 int StringLength(char *str)
 {
@@ -16,7 +17,8 @@ int main()
 {
     printf("Please input a string (shorter than 1024 chars):\n");
     char input[1024];
-    scanf("%[^\n]", input);
+    memset(input, 0, 1024);
+    scanf("%1023[^\n]%*c", input);
     int inputLen;
     inputLen = StringLength(input);
     if (inputLen == 0)

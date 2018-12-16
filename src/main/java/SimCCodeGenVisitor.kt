@@ -39,10 +39,11 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
 
         val variable = getVariablePointerByName(ctx.Identifier().text)
         if (LLVMGetTypeKind(LLVMTypeOf(rhs)) == LLVMArrayTypeKind) {
+            // ! this is a workaround
             val array = getVariablePointerByName(ctx.expression().text)
-            val indices = arrayOf(LLVMConstInt(LLVMInt32Type(), 0, 0))
-            val arrayHead = LLVMBuildInBoundsGEP(builder, array, PointerPointer(*indices), 1, "arr_ptr")
-            LLVMBuildStore(builder, rhs, arrayHead)
+            val indices = arrayOf(LLVMConstInt(LLVMInt32Type(), 0, 0), LLVMConstInt(LLVMInt32Type(), 0, 0))
+            val indexed = LLVMBuildInBoundsGEP(builder, array, PointerPointer(*indices), 2, "arr_ptr")
+            LLVMBuildStore(builder, indexed, variable)
         } else {
             LLVMBuildStore(builder, rhs, variable)
         }
@@ -51,19 +52,31 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
 
     override fun visitArrayAssignmentExpr(ctx: SimCParser.ArrayAssignmentExprContext): LLVMValueRef? {
         val rhs = visit(ctx.expression(1))
-
         val array = getVariablePointerByName(ctx.Identifier().text)
-        val value = visit(ctx.expression(0))
-        val indices = arrayOf(LLVMConstInt(LLVMInt32Type(), 0, 0), value)
-        val indexed = LLVMBuildInBoundsGEP(builder, array, PointerPointer(*indices), 2, "arr_ptr")
 
-        LLVMBuildStore(builder, rhs, indexed)
-        return rhs
+        // ! this ia a workaround
+        val value = visit(ctx.expression(0))
+        return if (LLVMGetTypeKind(LLVMGetElementType(LLVMTypeOf(array))) == LLVMArrayTypeKind) {
+            val indices = arrayOf(LLVMConstInt(LLVMInt32Type(), 0, 0), value)
+            val indexed = LLVMBuildInBoundsGEP(builder, array, PointerPointer(*indices), indices.size, "arr_ptr")
+            LLVMBuildStore(builder, rhs, indexed)
+            rhs
+        } else {
+            val indices = arrayOf(value)
+            val variable = getVariablePointerByName(ctx.Identifier().text)
+            val loaded = LLVMBuildLoad(builder, variable, "loaded")
+            val indexed = LLVMBuildInBoundsGEP(builder, loaded, PointerPointer(*indices), indices.size, "arr_ptr")
+            LLVMBuildStore(builder, rhs, indexed)
+            rhs
+        }
     }
 
     override fun visitOrderExpr(ctx: SimCParser.OrderExprContext): LLVMValueRef? {
-        val lhs = visit(ctx.expression(0))
-        val rhs = visit(ctx.expression(1))
+        var lhs = visit(ctx.expression(0))
+        var rhs = visit(ctx.expression(1))
+
+        lhs = LLVMBuildIntCast(builder, lhs, LLVMInt32Type(), "cast_lhs")
+        rhs = LLVMBuildIntCast(builder, rhs, LLVMInt32Type(), "cast_rhs")
         return when (ctx.op.text) {
             "<" -> LLVMBuildICmp(builder, LLVMIntSLT, lhs, rhs, "cmp_tmp")
             ">" -> LLVMBuildICmp(builder, LLVMIntSGT, lhs, rhs, "cmp_tmp")
@@ -74,8 +87,11 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
     }
 
     override fun visitAddSubExpr(ctx: SimCParser.AddSubExprContext): LLVMValueRef? {
-        val lhs = visit(ctx.expression(0))
-        val rhs = visit(ctx.expression(1))
+        var lhs = visit(ctx.expression(0))
+        var rhs = visit(ctx.expression(1))
+
+        lhs = LLVMBuildIntCast(builder, lhs, LLVMInt32Type(), "cast_lhs")
+        rhs = LLVMBuildIntCast(builder, rhs, LLVMInt32Type(), "cast_rhs")
         return when (ctx.op.text) {
             "+" -> LLVMBuildAdd(builder, lhs, rhs, "add_tmp")
             "-" -> LLVMBuildSub(builder, lhs, rhs, "sub_tmp")
@@ -84,8 +100,11 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
     }
 
     override fun visitLogicalAndExpr(ctx: SimCParser.LogicalAndExprContext): LLVMValueRef? {
-        val lhs = visit(ctx.expression(0))
-        val rhs = visit(ctx.expression(1))
+        var lhs = visit(ctx.expression(0))
+        var rhs = visit(ctx.expression(1))
+
+        lhs = LLVMBuildIntCast(builder, lhs, LLVMInt32Type(), "cast_lhs")
+        rhs = LLVMBuildIntCast(builder, rhs, LLVMInt32Type(), "cast_rhs")
         return LLVMBuildAnd(builder, lhs, rhs, "and_tmp")
     }
 
@@ -93,9 +112,18 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
         val array = getVariablePointerByName(ctx.Identifier().text)
         val value = visit(ctx.expression())!!
         val name = ctx.Identifier().text
-        val indices = arrayOf(LLVMConstInt(LLVMInt32Type(), 0, 0), value)
-        val indexed = LLVMBuildInBoundsGEP(builder, array, PointerPointer(*indices), 2, "arr_ptr")
-        return LLVMBuildLoad(builder, indexed, "arr_${name}_load")
+
+        if (LLVMGetTypeKind(LLVMGetElementType(LLVMTypeOf(array))) == LLVMArrayTypeKind) {
+            val indices = arrayOf(LLVMConstInt(LLVMInt32Type(), 0, 0), value)
+            val indexed = LLVMBuildInBoundsGEP(builder, array, PointerPointer(*indices), 2, "arr_ptr")
+            return LLVMBuildLoad(builder, indexed, "arr_${name}_load")
+        } else {
+            val indices = arrayOf(value)
+            val variable = getVariablePointerByName(ctx.Identifier().text)
+            val loaded = LLVMBuildLoad(builder, variable, "loaded")
+            val indexed = LLVMBuildInBoundsGEP(builder, loaded, PointerPointer(*indices), indices.size, "arr_ptr")
+            return LLVMBuildLoad(builder, indexed, "ptr_${name}_load")
+        }
     }
 
     override fun visitParensExpr(ctx: SimCParser.ParensExprContext): LLVMValueRef? {
@@ -108,9 +136,12 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
     }
 
     override fun visitLogicalOrExpr(ctx: SimCParser.LogicalOrExprContext): LLVMValueRef? {
-        val lhs = visit(ctx.expression(0))
-        val rhs = visit(ctx.expression(1))
-        return LLVMBuildOr(builder, lhs, rhs, "and_or")
+        var lhs = visit(ctx.expression(0))
+        var rhs = visit(ctx.expression(1))
+
+        lhs = LLVMBuildIntCast(builder, lhs, LLVMInt32Type(), "cast_lhs")
+        rhs = LLVMBuildIntCast(builder, rhs, LLVMInt32Type(), "cast_rhs")
+        return LLVMBuildOr(builder, lhs, rhs, "or_tmp")
     }
 
     override fun visitUnaryOpExpr(ctx: SimCParser.UnaryOpExprContext): LLVMValueRef? {
@@ -124,8 +155,11 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
     }
 
     override fun visitLshRshExpr(ctx: SimCParser.LshRshExprContext): LLVMValueRef? {
-        val lhs = visit(ctx.expression(0))
-        val rhs = visit(ctx.expression(1))
+        var lhs = visit(ctx.expression(0))
+        var rhs = visit(ctx.expression(1))
+
+        lhs = LLVMBuildIntCast(builder, lhs, LLVMInt32Type(), "cast_lhs")
+        rhs = LLVMBuildIntCast(builder, rhs, LLVMInt32Type(), "cast_rhs")
         return when (ctx.op.text) {
             "<<" -> LLVMBuildShl(builder, lhs, rhs, "shl_tmp")
             ">>" -> LLVMBuildAShr(builder, lhs, rhs, "shr_tmp")
@@ -142,11 +176,45 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
         while (arguments != null) {
             when (arguments) {
                 is SimCParser.HeadExpressionContext -> {
-                    parameters.add(visit(arguments.expression())!!)
+                    if (arguments.expression() is SimCParser.IdentifierExprContext) {
+                        val name = arguments.expression().text
+                        val array = getVariablePointerByName(name)
+                        if (LLVMGetTypeKind(LLVMGetElementType(LLVMTypeOf(array))) == LLVMArrayTypeKind) {
+                            val indices = arrayOf(
+                                    LLVMConstInt(LLVMInt32Type(), 0, 0), LLVMConstInt(LLVMInt32Type(), 0, 0)
+                            )
+                            val indexed = LLVMBuildInBoundsGEP(
+                                    builder, array, PointerPointer(*indices), indices.size, "arr_ptr"
+                            )
+                            parameters.add(indexed)
+                        } else {
+                            parameters.add(visit(arguments.expression())!!)
+                        }
+                    } else {
+                        parameters.add(visit(arguments.expression())!!)
+                    }
+
                     arguments = null
                 }
                 is SimCParser.TailExpressionContext -> {
-                    parameters.add(visit(arguments.expression())!!)
+                    if (arguments.expression() is SimCParser.IdentifierExprContext) {
+                        val name = arguments.expression().text
+                        val array = getVariablePointerByName(name)
+                        if (LLVMGetTypeKind(LLVMGetElementType(LLVMTypeOf(array))) == LLVMArrayTypeKind) {
+                            val indices = arrayOf(
+                                    LLVMConstInt(LLVMInt32Type(), 0, 0), LLVMConstInt(LLVMInt32Type(), 0, 0)
+                            )
+                            val indexed = LLVMBuildInBoundsGEP(
+                                    builder, array, PointerPointer(*indices), indices.size, "arr_ptr"
+                            )
+                            parameters.add(indexed)
+                        } else {
+                            parameters.add(visit(arguments.expression())!!)
+                        }
+                    } else {
+                        parameters.add(visit(arguments.expression())!!)
+                    }
+
                     arguments = arguments.arguments()
                 }
             }
@@ -159,8 +227,11 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
     }
 
     override fun visitMulDivExpr(ctx: SimCParser.MulDivExprContext): LLVMValueRef? {
-        val lhs = visit(ctx.expression(0))
-        val rhs = visit(ctx.expression(1))
+        var lhs = visit(ctx.expression(0))
+        var rhs = visit(ctx.expression(1))
+
+        lhs = LLVMBuildIntCast(builder, lhs, LLVMInt32Type(), "cast_lhs")
+        rhs = LLVMBuildIntCast(builder, rhs, LLVMInt32Type(), "cast_rhs")
         return when (ctx.op.text) {
             "*" -> LLVMBuildMul(builder, lhs, rhs, "mul_tmp")
             "/" -> LLVMBuildSDiv(builder, lhs, rhs, "s_div_tmp")
@@ -170,8 +241,11 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
     }
 
     override fun visitEqualityExpr(ctx: SimCParser.EqualityExprContext): LLVMValueRef? {
-        val lhs = visit(ctx.expression(0))
-        val rhs = visit(ctx.expression(1))
+        var lhs = visit(ctx.expression(0))
+        var rhs = visit(ctx.expression(1))
+
+        lhs = LLVMBuildIntCast(builder, lhs, LLVMInt32Type(), "cast_lhs")
+        rhs = LLVMBuildIntCast(builder, rhs, LLVMInt32Type(), "cast_rhs")
         return when (ctx.op.text) {
             "==" -> LLVMBuildICmp(builder, LLVMIntEQ, lhs, rhs, "cmp_tmp")
             "!=" -> LLVMBuildICmp(builder, LLVMIntNE, lhs, rhs, "cmp_tmp")
@@ -206,6 +280,7 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
 
         val pointer = LLVMBuildAlloca(builder, arrayType, name)
         namesChain.top()[name] = pointer
+
         return null
     }
 
@@ -244,7 +319,10 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
     }
 
     override fun visitIfElseStatement(ctx: SimCParser.IfElseStatementContext): LLVMValueRef? {
-        val condition = visit(ctx.expression())
+        var condition = visit(ctx.expression())
+        condition = LLVMBuildIntCast(builder, condition, LLVMInt1Type(), "cast_i1")
+        condition = LLVMBuildICmp(builder, LLVMIntNE, condition, LLVMConstInt(LLVMInt1Type(), 0, 0), "to_i1")
+
         val function = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder))
 
         val positiveBB = LLVMAppendBasicBlock(function, "then")
@@ -275,7 +353,10 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
         LLVMBuildBr(builder, checkBB)
 
         LLVMPositionBuilderAtEnd(builder, checkBB)
-        val condition = visit(ctx.expression())
+        var condition = visit(ctx.expression())
+        condition = LLVMBuildIntCast(builder, condition, LLVMInt1Type(), "cast_i1")
+        condition = LLVMBuildICmp(builder, LLVMIntNE, condition, LLVMConstInt(LLVMInt1Type(), 0, 0), "to_i1")
+
         LLVMBuildCondBr(builder, condition, bodyBB, endWhileBB)
 
         LLVMPositionBuilderAtEnd(builder, bodyBB)
@@ -296,7 +377,10 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
 
         LLVMPositionBuilderAtEnd(builder, bodyBB)
         visit(ctx.statement())
-        val condition = visit(ctx.expression())
+        var condition = visit(ctx.expression())
+        condition = LLVMBuildIntCast(builder, condition, LLVMInt1Type(), "cast_i1")
+        condition = LLVMBuildICmp(builder, LLVMIntNE, condition, LLVMConstInt(LLVMInt1Type(), 0, 0), "to_i1")
+
         LLVMBuildCondBr(builder, condition, bodyBB, endWhileBB)
 
         LLVMPositionBuilderAtEnd(builder, endWhileBB)
@@ -315,11 +399,14 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
         LLVMBuildBr(builder, checkBB)
 
         LLVMPositionBuilderAtEnd(builder, checkBB)
-        val condition = if (ctx.expression(1) != null) {
+        var condition = if (ctx.expression(1) != null) {
             visit(ctx.expression(1))
         } else {
             LLVMConstInt(LLVMInt32Type(), 1, 0)
         }
+        condition = LLVMBuildIntCast(builder, condition, LLVMInt1Type(), "cast_i1")
+        condition = LLVMBuildICmp(builder, LLVMIntNE, condition, LLVMConstInt(LLVMInt1Type(), 0, 0), "to_i1")
+
         LLVMBuildCondBr(builder, condition, bodyBB, endForBB)
 
         LLVMPositionBuilderAtEnd(builder, bodyBB)

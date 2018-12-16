@@ -1,5 +1,6 @@
 int printf(char *format, ...);
 int scanf(char *format, ...);
+char *memset(char *addr, int value, int size);
 
 int StringLength(char *str)
 {
@@ -47,10 +48,12 @@ int main()
     char source[65536];
     char pattern[1024];
     int next[1024];
+    memset(source, 0, 65536);
+    memset(pattern, 0, 1024);
     printf("Please input the source string (shorter than 2^16 chars):\n");
-    scanf("%[^\n]", source);
+    scanf("%65535[^\n]%*c", source);
     printf("Please input the pattern string (shorter than 2^10 chars):\n");
-    scanf("%[^\n]", pattern);
+    scanf("%1023[^\n]%*c", pattern);
 
     int patternLength;
     patternLength = StringLength(pattern);

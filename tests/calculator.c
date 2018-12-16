@@ -46,10 +46,8 @@ int GetOpPrecedence(char op)
     {
         return 40;
     }
-    else
-    {
-        return -1;
-    }
+
+    return -1;
 }
 
 int BinCalc(char op, int lhs, int rhs)
@@ -80,7 +78,7 @@ int main()
     int numStackSize;
     numStackSize = 0;
 
-    int opStack[1024];
+    char opStack[1024];
     int opStackSize;
     opStackSize = 0;
 
