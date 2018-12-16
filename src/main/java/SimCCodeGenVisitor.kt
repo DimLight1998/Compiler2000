@@ -113,16 +113,16 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
         val value = visit(ctx.expression())!!
         val name = ctx.Identifier().text
 
-        if (LLVMGetTypeKind(LLVMGetElementType(LLVMTypeOf(array))) == LLVMArrayTypeKind) {
+        return if (LLVMGetTypeKind(LLVMGetElementType(LLVMTypeOf(array))) == LLVMArrayTypeKind) {
             val indices = arrayOf(LLVMConstInt(LLVMInt32Type(), 0, 0), value)
             val indexed = LLVMBuildInBoundsGEP(builder, array, PointerPointer(*indices), 2, "arr_ptr")
-            return LLVMBuildLoad(builder, indexed, "arr_${name}_load")
+            LLVMBuildLoad(builder, indexed, "arr_${name}_load")
         } else {
             val indices = arrayOf(value)
             val variable = getVariablePointerByName(ctx.Identifier().text)
             val loaded = LLVMBuildLoad(builder, variable, "loaded")
             val indexed = LLVMBuildInBoundsGEP(builder, loaded, PointerPointer(*indices), indices.size, "arr_ptr")
-            return LLVMBuildLoad(builder, indexed, "ptr_${name}_load")
+            LLVMBuildLoad(builder, indexed, "ptr_${name}_load")
         }
     }
 
@@ -173,48 +173,37 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
         // get parameters
         val parameters = ArrayList<LLVMValueRef>()
         var arguments = ctx.arguments()
+
+        fun getNextParameter(expression: SimCParser.ExpressionContext?) {
+            if (expression is SimCParser.IdentifierExprContext) {
+                val name = expression.text
+                val array = getVariablePointerByName(name)
+                if (LLVMGetTypeKind(LLVMGetElementType(LLVMTypeOf(array))) == LLVMArrayTypeKind) {
+                    val indices = arrayOf(
+                            LLVMConstInt(LLVMInt32Type(), 0, 0), LLVMConstInt(LLVMInt32Type(), 0, 0)
+                    )
+                    val indexed = LLVMBuildInBoundsGEP(
+                            builder, array, PointerPointer(*indices), indices.size, "arr_ptr"
+                    )
+                    parameters.add(indexed)
+                } else {
+                    parameters.add(visit(expression)!!)
+                }
+            } else {
+                parameters.add(visit(expression)!!)
+            }
+        }
+
         while (arguments != null) {
             when (arguments) {
                 is SimCParser.HeadExpressionContext -> {
-                    if (arguments.expression() is SimCParser.IdentifierExprContext) {
-                        val name = arguments.expression().text
-                        val array = getVariablePointerByName(name)
-                        if (LLVMGetTypeKind(LLVMGetElementType(LLVMTypeOf(array))) == LLVMArrayTypeKind) {
-                            val indices = arrayOf(
-                                    LLVMConstInt(LLVMInt32Type(), 0, 0), LLVMConstInt(LLVMInt32Type(), 0, 0)
-                            )
-                            val indexed = LLVMBuildInBoundsGEP(
-                                    builder, array, PointerPointer(*indices), indices.size, "arr_ptr"
-                            )
-                            parameters.add(indexed)
-                        } else {
-                            parameters.add(visit(arguments.expression())!!)
-                        }
-                    } else {
-                        parameters.add(visit(arguments.expression())!!)
-                    }
-
+                    val expression = arguments.expression()
+                    getNextParameter(expression)
                     arguments = null
                 }
                 is SimCParser.TailExpressionContext -> {
-                    if (arguments.expression() is SimCParser.IdentifierExprContext) {
-                        val name = arguments.expression().text
-                        val array = getVariablePointerByName(name)
-                        if (LLVMGetTypeKind(LLVMGetElementType(LLVMTypeOf(array))) == LLVMArrayTypeKind) {
-                            val indices = arrayOf(
-                                    LLVMConstInt(LLVMInt32Type(), 0, 0), LLVMConstInt(LLVMInt32Type(), 0, 0)
-                            )
-                            val indexed = LLVMBuildInBoundsGEP(
-                                    builder, array, PointerPointer(*indices), indices.size, "arr_ptr"
-                            )
-                            parameters.add(indexed)
-                        } else {
-                            parameters.add(visit(arguments.expression())!!)
-                        }
-                    } else {
-                        parameters.add(visit(arguments.expression())!!)
-                    }
-
+                    val expression = arguments.expression()
+                    getNextParameter(expression)
                     arguments = arguments.arguments()
                 }
             }
