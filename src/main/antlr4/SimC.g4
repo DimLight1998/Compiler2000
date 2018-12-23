@@ -11,6 +11,8 @@ expression:
     | '(' expression ')'                                           # parensExpr
     | Identifier '[' expression ']'                                # arrayIndexerExpr
     | Identifier '(' arguments? ')'                                # functionCallExpr
+    | Identifier op = ('++' | '--')                                # suffixUnaryOpExpr
+    | op = ('++' | '--') Identifier                                # prefixUnaryOpExpr
     | op = ('+' | '-' | '!') expression                            # unaryOpExpr
     | expression op = ('*' | '/' | '%') expression                 # mulDivExpr
     | expression op = ('+' | '-') expression                       # addSubExpr
@@ -24,6 +26,7 @@ expression:
 
 declaration:
     typeSpecifier Identifier ';'                    # variableDeclaration
+    | typeSpecifier Identifier '=' expression ';'   # variableInitializeDeclaration
     | typeSpecifier Identifier '[' Constant ']' ';' # arrayDeclaration
     | functionSignature ';'                         # functionDeclaration;
 

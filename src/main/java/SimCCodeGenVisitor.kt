@@ -169,6 +169,42 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
         }
     }
 
+    override fun visitPrefixUnaryOpExpr(ctx: SimCParser.PrefixUnaryOpExprContext): LLVMValueRef? {
+        val pointer = getVariablePointerByName(ctx.Identifier().text)
+        val operand = LLVMBuildLoad(builder, pointer, "${ctx.Identifier().text}_load")
+        return when (ctx.op.text) {
+            "++" -> {
+                val result = LLVMBuildAdd(builder, operand, LLVMConstInt(LLVMTypeOf(operand), 1, 1), "unary_add_tmp")
+                LLVMBuildStore(builder, result, pointer)
+                result
+            }
+            "--" -> {
+                val result = LLVMBuildSub(builder, operand, LLVMConstInt(LLVMTypeOf(operand), 1, 1), "unary_sub_tmp")
+                LLVMBuildStore(builder, result, pointer)
+                result
+            }
+            else -> throw Exception("unknown op")
+        }
+    }
+
+    override fun visitSuffixUnaryOpExpr(ctx: SimCParser.SuffixUnaryOpExprContext): LLVMValueRef? {
+        val pointer = getVariablePointerByName(ctx.Identifier().text)
+        val operand = LLVMBuildLoad(builder, pointer, "${ctx.Identifier().text}_load")
+        return when (ctx.op.text) {
+            "++" -> {
+                val result = LLVMBuildAdd(builder, operand, LLVMConstInt(LLVMTypeOf(operand), 1, 1), "suffix_unary_add_tmp")
+                LLVMBuildStore(builder, result, pointer)
+                operand
+            }
+            "--" -> {
+                val result = LLVMBuildSub(builder, operand, LLVMConstInt(LLVMTypeOf(operand), 1, 1), "suffix_unary_sub_tmp")
+                LLVMBuildStore(builder, result, pointer)
+                operand
+            }
+            else -> throw Exception("unknown op")
+        }
+    }
+
     override fun visitLshRshExpr(ctx: SimCParser.LshRshExprContext): LLVMValueRef? {
         var lhs = visit(ctx.expression(0))
         var rhs = visit(ctx.expression(1))
@@ -271,6 +307,18 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
 
         val pointer = LLVMBuildAlloca(builder, type, name)
         LLVMBuildStore(builder, LLVMConstNull(type), pointer)
+        namesChain.top()[name] = pointer
+        return null
+    }
+
+    override fun visitVariableInitializeDeclaration(ctx: SimCParser.VariableInitializeDeclarationContext): LLVMValueRef? {
+        val type = getLLVMType(ctx.typeSpecifier())
+        val name = ctx.Identifier().text
+        if (name in namesChain.top().keys)
+            throw Exception("variable redefined")
+        val expression = visit(ctx.expression())
+        val pointer = LLVMBuildAlloca(builder, type, name)
+        LLVMBuildStore(builder, expression, pointer)
         namesChain.top()[name] = pointer
         return null
     }
