@@ -5,10 +5,25 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
     private val module = LLVMModuleCreateWithName("SimCModule")!!
     private val builder = LLVMCreateBuilder()!!
     private val namesChain = ArrayList<HashMap<String, LLVMValueRef>>()
+    private val functionPassManager = LLVMCreateFunctionPassManagerForModule(module)!!
+    private val passManager = LLVMCreatePassManager()!!
+    private var currentBlockHasRet = false
+
+    fun initPassManagers() {
+        LLVMAddInstructionCombiningPass(functionPassManager)
+        LLVMAddReassociatePass(functionPassManager)
+        LLVMAddGVNPass(functionPassManager)
+        LLVMAddCFGSimplificationPass(functionPassManager)
+        LLVMInitializeFunctionPassManager(functionPassManager)
+
+        LLVMAddGlobalDCEPass(passManager)
+    }
 
     fun dispose() {
         LLVMDisposeBuilder(builder)
         LLVMDisposeModule(module)
+        LLVMDisposePassManager(functionPassManager)
+        LLVMDisposePassManager(passManager)
     }
 
     fun writeBitCodeTo(filePath: String) {
@@ -169,6 +184,7 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
 
     override fun visitFunctionCallExpr(ctx: SimCParser.FunctionCallExprContext): LLVMValueRef? {
         val function = LLVMGetNamedFunction(module, ctx.Identifier().text)
+        val returnType = LLVMGetReturnType(LLVMGetElementType(LLVMTypeOf(function)))
 
         // get parameters
         val parameters = ArrayList<LLVMValueRef>()
@@ -211,7 +227,7 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
 
         // the grammar is left recursive, so reverse the list
         return LLVMBuildCall(builder, function, PointerPointer(*parameters.reversed().toTypedArray()),
-                parameters.size, "${ctx.Identifier().text}_result"
+                parameters.size, if (returnType == LLVMVoidType()) "" else "${ctx.Identifier().text}_result"
         )
     }
 
@@ -317,17 +333,26 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
         val positiveBB = LLVMAppendBasicBlock(function, "then")
         val negativeBB = LLVMAppendBasicBlock(function, "else")
         val mergeBB = LLVMAppendBasicBlock(function, "end_if")
-        LLVMBuildCondBr(builder, condition, positiveBB, negativeBB)
+        if (!currentBlockHasRet) {
+            LLVMBuildCondBr(builder, condition, positiveBB, negativeBB)
+        }
 
+        currentBlockHasRet = false
         LLVMPositionBuilderAtEnd(builder, positiveBB)
         visit(ctx.statement(0))
-        LLVMBuildBr(builder, mergeBB)
+        if (!currentBlockHasRet) {
+            LLVMBuildBr(builder, mergeBB)
+        }
 
+        currentBlockHasRet = false
         LLVMPositionBuilderAtEnd(builder, negativeBB)
         if (ctx.statement(1) != null)
             visit(ctx.statement(1))
-        LLVMBuildBr(builder, mergeBB)
+        if (!currentBlockHasRet) {
+            LLVMBuildBr(builder, mergeBB)
+        }
 
+        currentBlockHasRet = false
         LLVMPositionBuilderAtEnd(builder, mergeBB)
         return null
     }
@@ -339,19 +364,28 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
         val bodyBB = LLVMAppendBasicBlock(function, "loop_body")
         val endWhileBB = LLVMAppendBasicBlock(function, "end_while")
 
-        LLVMBuildBr(builder, checkBB)
+        if (!currentBlockHasRet) {
+            LLVMBuildBr(builder, checkBB)
+        }
 
+        currentBlockHasRet = false
         LLVMPositionBuilderAtEnd(builder, checkBB)
         var condition = visit(ctx.expression())
         condition = LLVMBuildIntCast(builder, condition, LLVMInt1Type(), "cast_i1")
         condition = LLVMBuildICmp(builder, LLVMIntNE, condition, LLVMConstInt(LLVMInt1Type(), 0, 0), "to_i1")
 
-        LLVMBuildCondBr(builder, condition, bodyBB, endWhileBB)
+        if (!currentBlockHasRet) {
+            LLVMBuildCondBr(builder, condition, bodyBB, endWhileBB)
+        }
 
+        currentBlockHasRet = false
         LLVMPositionBuilderAtEnd(builder, bodyBB)
         visit(ctx.statement())
-        LLVMBuildBr(builder, checkBB)
+        if (!currentBlockHasRet) {
+            LLVMBuildBr(builder, checkBB)
+        }
 
+        currentBlockHasRet = false
         LLVMPositionBuilderAtEnd(builder, endWhileBB)
         return null
     }
@@ -362,16 +396,22 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
         val bodyBB = LLVMAppendBasicBlock(function, "loop_body")
         val endWhileBB = LLVMAppendBasicBlock(function, "end_while")
 
-        LLVMBuildBr(builder, bodyBB)
+        if (!currentBlockHasRet) {
+            LLVMBuildBr(builder, bodyBB)
+        }
 
+        currentBlockHasRet = false
         LLVMPositionBuilderAtEnd(builder, bodyBB)
         visit(ctx.statement())
         var condition = visit(ctx.expression())
         condition = LLVMBuildIntCast(builder, condition, LLVMInt1Type(), "cast_i1")
         condition = LLVMBuildICmp(builder, LLVMIntNE, condition, LLVMConstInt(LLVMInt1Type(), 0, 0), "to_i1")
 
-        LLVMBuildCondBr(builder, condition, bodyBB, endWhileBB)
+        if (!currentBlockHasRet) {
+            LLVMBuildCondBr(builder, condition, bodyBB, endWhileBB)
+        }
 
+        currentBlockHasRet = false
         LLVMPositionBuilderAtEnd(builder, endWhileBB)
         return null
     }
@@ -385,8 +425,11 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
 
         if (ctx.expression(0) != null)
             visit(ctx.expression(0))
-        LLVMBuildBr(builder, checkBB)
+        if (!currentBlockHasRet) {
+            LLVMBuildBr(builder, checkBB)
+        }
 
+        currentBlockHasRet = false
         LLVMPositionBuilderAtEnd(builder, checkBB)
         var condition = if (ctx.expression(1) != null) {
             visit(ctx.expression(1))
@@ -396,19 +439,26 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
         condition = LLVMBuildIntCast(builder, condition, LLVMInt1Type(), "cast_i1")
         condition = LLVMBuildICmp(builder, LLVMIntNE, condition, LLVMConstInt(LLVMInt1Type(), 0, 0), "to_i1")
 
-        LLVMBuildCondBr(builder, condition, bodyBB, endForBB)
+        if (!currentBlockHasRet) {
+            LLVMBuildCondBr(builder, condition, bodyBB, endForBB)
+        }
 
+        currentBlockHasRet = false
         LLVMPositionBuilderAtEnd(builder, bodyBB)
         visit(ctx.statement())
         if (ctx.expression(2) != null)
             visit(ctx.expression(2))
-        LLVMBuildBr(builder, checkBB)
+        if (!currentBlockHasRet) {
+            LLVMBuildBr(builder, checkBB)
+        }
 
+        currentBlockHasRet = false
         LLVMPositionBuilderAtEnd(builder, endForBB)
         return null
     }
 
     override fun visitReturnStatement(ctx: SimCParser.ReturnStatementContext): LLVMValueRef? {
+        currentBlockHasRet = true
         if (ctx.expression() == null)
             return LLVMBuildRetVoid(builder)
         val retVal = visit(ctx.expression())
@@ -426,7 +476,8 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
                 val type = getLLVMType(declaration.typeSpecifier())
                 val name = declaration.Identifier().text
                 val pointer = LLVMAddGlobal(module, type, name)
-                LLVMSetLinkage(pointer, LLVMPrivateLinkage)
+                LLVMSetLinkage(pointer, LLVMCommonLinkage)
+                LLVMSetInitializer(pointer, LLVMConstNull(type))
                 namesChain.top()[name] = pointer
             }
             is SimCParser.ArrayDeclarationContext -> {
@@ -435,7 +486,8 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
                 val size = declaration.Constant().text.toInt()
                 val arrayType = LLVMArrayType(baseType, size)
                 val array = LLVMAddGlobal(module, arrayType, name)
-                LLVMSetLinkage(array, LLVMPrivateLinkage)
+                LLVMSetLinkage(array, LLVMCommonLinkage)
+                LLVMSetInitializer(array, LLVMConstNull(arrayType))
                 namesChain.top()[name] = array
             }
             else -> {
@@ -448,7 +500,9 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
     override fun visitFullSource(ctx: SimCParser.FullSourceContext?): LLVMValueRef? {
         // global naming space
         namesChain.push(HashMap())
-        return visitChildren(ctx)
+        val ret = visitChildren(ctx)
+        LLVMRunPassManager(passManager, module)
+        return ret
     }
 
     override fun visitFunctionFullDefinition(ctx: SimCParser.FunctionFullDefinitionContext): LLVMValueRef? {
@@ -461,6 +515,7 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
 
         namesChain.push(namesChainPart)
 
+        currentBlockHasRet = false
         LLVMPositionBuilderAtEnd(builder, LLVMAppendBasicBlock(function, "entry"))
         val numParams = LLVMCountParams(function)
 
@@ -474,7 +529,10 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
         }
 
         val startBB = LLVMAppendBasicBlock(function, "start")
-        LLVMBuildBr(builder, startBB)
+        if (!currentBlockHasRet) {
+            LLVMBuildBr(builder, startBB)
+        }
+        currentBlockHasRet = false
         LLVMPositionBuilderAtEnd(builder, startBB)
 
         if (ctx.blockItemList() != null)
@@ -482,6 +540,17 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
 
         namesChain.pop()
 
+        if (!currentBlockHasRet) {
+            val type = getLLVMType(signature.typeSpecifier())
+            if (type == LLVMVoidType()) {
+                LLVMBuildRetVoid(builder)
+            } else {
+                LLVMBuildRet(builder, LLVMConstNull(type))
+            }
+            currentBlockHasRet = true
+        }
+
+        LLVMRunFunctionPassManager(functionPassManager, function)
         LLVMVerifyFunction(function, LLVMPrintMessageAction)
         return function
     }

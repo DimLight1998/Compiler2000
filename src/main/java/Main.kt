@@ -21,6 +21,7 @@ object Main {
         val parser = SimCParser(tokenStream)
         val tree = parser.compilationUnit()
         val codeGenVisitor = SimCCodeGenVisitor()
+        codeGenVisitor.initPassManagers()
         codeGenVisitor.visit(tree)
         codeGenVisitor.writeIRCodeTo(File("tests/ir.ll").path)
         codeGenVisitor.writeBitCodeTo(File("tests/bitCode.bc").path)
