@@ -49,7 +49,6 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
     }
 
     override fun visitAssignmentExpr(ctx: SimCParser.AssignmentExprContext): LLVMValueRef? {
-        val lhs = visit(ctx.Identifier())
         val rhs = visit(ctx.expression())
 
         val variable = getVariablePointerByName(ctx.Identifier().text)
@@ -62,7 +61,7 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
         } else {
             LLVMBuildStore(builder, rhs, variable)
         }
-        return lhs
+        return rhs
     }
 
     override fun visitArrayAssignmentExpr(ctx: SimCParser.ArrayAssignmentExprContext): LLVMValueRef? {
