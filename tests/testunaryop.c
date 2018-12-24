@@ -11,7 +11,7 @@ int main() {
     int e = 0;
     scanf("%19[^\n]%*c", buffer);
     int i;
-    for(i = 0; buffer[i] != 0; i++) {
+    for(i = 0; buffer[i]; i++) {
         e = e * 10 + buffer[i] - 48;
     }
     printf("%d\n", e);

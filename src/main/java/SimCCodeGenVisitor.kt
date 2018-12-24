@@ -372,8 +372,7 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
 
     override fun visitIfElseStatement(ctx: SimCParser.IfElseStatementContext): LLVMValueRef? {
         var condition = visit(ctx.expression())
-        condition = LLVMBuildIntCast(builder, condition, LLVMInt1Type(), "cast_i1")
-        condition = LLVMBuildICmp(builder, LLVMIntNE, condition, LLVMConstInt(LLVMInt1Type(), 0, 0), "to_i1")
+        condition = LLVMBuildICmp(builder, LLVMIntNE, condition, LLVMConstInt(LLVMTypeOf(condition), 0, 0), "to_i1")
 
         val function = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder))
 
@@ -418,8 +417,7 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
         currentBlockHasRet = false
         LLVMPositionBuilderAtEnd(builder, checkBB)
         var condition = visit(ctx.expression())
-        condition = LLVMBuildIntCast(builder, condition, LLVMInt1Type(), "cast_i1")
-        condition = LLVMBuildICmp(builder, LLVMIntNE, condition, LLVMConstInt(LLVMInt1Type(), 0, 0), "to_i1")
+        condition = LLVMBuildICmp(builder, LLVMIntNE, condition, LLVMConstInt(LLVMTypeOf(condition), 0, 0), "to_i1")
 
         if (!currentBlockHasRet) {
             LLVMBuildCondBr(builder, condition, bodyBB, endWhileBB)
@@ -451,8 +449,7 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
         LLVMPositionBuilderAtEnd(builder, bodyBB)
         visit(ctx.statement())
         var condition = visit(ctx.expression())
-        condition = LLVMBuildIntCast(builder, condition, LLVMInt1Type(), "cast_i1")
-        condition = LLVMBuildICmp(builder, LLVMIntNE, condition, LLVMConstInt(LLVMInt1Type(), 0, 0), "to_i1")
+        condition = LLVMBuildICmp(builder, LLVMIntNE, condition, LLVMConstInt(LLVMTypeOf(condition), 0, 0), "to_i1")
 
         if (!currentBlockHasRet) {
             LLVMBuildCondBr(builder, condition, bodyBB, endWhileBB)
@@ -483,8 +480,7 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
         } else {
             LLVMConstInt(LLVMInt32Type(), 1, 0)
         }
-        condition = LLVMBuildIntCast(builder, condition, LLVMInt1Type(), "cast_i1")
-        condition = LLVMBuildICmp(builder, LLVMIntNE, condition, LLVMConstInt(LLVMInt1Type(), 0, 0), "to_i1")
+        condition = LLVMBuildICmp(builder, LLVMIntNE, condition, LLVMConstInt(LLVMTypeOf(condition), 0, 0), "to_i1")
 
         if (!currentBlockHasRet) {
             LLVMBuildCondBr(builder, condition, bodyBB, endForBB)
