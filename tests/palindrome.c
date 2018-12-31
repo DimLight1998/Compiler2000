@@ -4,11 +4,10 @@ char *memset(char *ptr, int value, int num);
 
 int StringLength(char *str)
 {
-    int len;
-    len = 0;
-    while (str[len] != 0)
+    int len = 0;
+    while (str[len])
     {
-        len = len + 1;
+        len++;
     }
     return len;
 }
@@ -19,8 +18,7 @@ int main()
     char input[1024];
     memset(input, 0, 1024);
     scanf("%1023[^\n]%*c", input);
-    int inputLen;
-    inputLen = StringLength(input);
+    int inputLen = StringLength(input);
     if (inputLen == 0)
     {
         printf("Error, you input an empty string!\n");
@@ -28,13 +26,10 @@ int main()
     }
     else
     {
-        int half;
-        half = inputLen / 2;
-        int i;
-        i = 0;
-        int isPalindrome;
-        isPalindrome = 1;
-        for (i = 0; i < half; i = i + 1)
+        int half = inputLen / 2;
+        int i = 0;
+        int isPalindrome = 1;
+        for (i = 0; i < half; i++)
         {
             if (input[i] != input[inputLen - 1 - i])
             {
