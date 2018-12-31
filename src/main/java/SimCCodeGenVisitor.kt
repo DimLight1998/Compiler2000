@@ -1,5 +1,5 @@
-import org.bytedeco.javacpp.*
 import org.bytedeco.javacpp.LLVM.*
+import org.bytedeco.javacpp.PointerPointer
 
 class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
     private val module = LLVMModuleCreateWithName("SimCModule")!!
@@ -7,9 +7,79 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
     private val namesChain = ArrayList<HashMap<String, LLVMValueRef>>()
     private val functionPassManager = LLVMCreateFunctionPassManagerForModule(module)!!
     private val passManager = LLVMCreatePassManager()!!
+    private val engine = LLVMExecutionEngineRef()
     private var currentBlockHasRet = false
+    private var anonymousRef: LLVMValueRef? = null
+    private var anonymousType: LLVMTypeRef? = null
 
-    fun initPassManagers() {
+    fun clearFunction() {
+        anonymousRef = null
+        anonymousType = null
+    }
+
+    fun hasFunction(): Boolean {
+        return anonymousRef != null
+    }
+
+    fun runOutput(): String {
+        val res = LLVMRunFunction(engine, anonymousRef, 0, PointerPointer(*emptyArray<LLVMTypeRef>()))
+        val ret = LLVMGenericValueToInt(res, 1)
+        LLVMDisposeGenericValue(res)
+        return when (LLVMGetTypeKind(anonymousType)) {
+            LLVMIntegerTypeKind -> {
+                when (LLVMGetIntTypeWidth(anonymousType)) {
+                    8 -> {
+                        "'" + Character.toChars(ret.toInt()).toString() + "'"
+                    }
+                    32 -> {
+                        ret.toString()
+                    }
+                    else -> {
+                        throw Exception("unknown integer width")
+                    }
+                }
+            }
+            LLVMPointerTypeKind -> {
+                when (LLVMGetIntTypeWidth(LLVMGetElementType(anonymousType))) {
+                    8 -> {
+                        "char* (0x" + ret.toString(16) + ")"
+                    }
+                    32 -> {
+                        "int* (0x" + ret.toString(16) + ")"
+                    }
+                    else -> {
+                        throw Exception("unknown integer width")
+                    }
+                }
+            }
+            LLVMArrayTypeKind -> {
+                when (LLVMGetIntTypeWidth(LLVMGetElementType(anonymousType))) {
+                    8 -> {
+                        "char[" + LLVMGetArrayLength(anonymousType) + "] \"" + Character.toChars(ret.toInt()) + " ...\""
+                    }
+                    32 -> {
+                        "int[" + LLVMGetArrayLength(anonymousType) + "] {" + ret + " ...}"
+                    }
+                    else -> {
+                        throw Exception("unknown integer width")
+                    }
+                }
+            }
+            else -> {
+                throw Exception("unknown type kind")
+            }
+        }
+    }
+
+    fun initRepl() {
+        namesChain.push(HashMap())
+    }
+
+    fun init() {
+        LLVMLinkInInterpreter()
+        LLVMInitializeNativeTarget()
+        LLVMInitializeAllAsmPrinters()
+        LLVMInitializeNativeAsmParser()
         LLVMAddInstructionCombiningPass(functionPassManager)
         LLVMAddReassociatePass(functionPassManager)
         LLVMAddGVNPass(functionPassManager)
@@ -17,10 +87,18 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
         LLVMInitializeFunctionPassManager(functionPassManager)
 
         LLVMAddGlobalDCEPass(passManager)
+
+        val error = ByteArray(0)
+        if (LLVMCreateInterpreterForModule(engine, module, error) != 0 || error.isNotEmpty()) {
+            throw Exception(if (error.isNotEmpty()) String(error) else "cannot init engine")
+        }
     }
 
     fun dispose() {
         LLVMDisposeBuilder(builder)
+        val error = ByteArray(0)
+        LLVMRemoveModule(engine, module, module, error)
+        LLVMDisposeExecutionEngine(engine)
         LLVMDisposeModule(module)
         LLVMDisposePassManager(functionPassManager)
         LLVMDisposePassManager(passManager)
@@ -39,6 +117,82 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
         while (idx >= 0 && name !in namesChain[idx].keys) idx--
         if (idx == -1) throw Exception("unknown variable")
         return namesChain[idx][name]!!
+    }
+
+    override fun visitReplDeclaration(ctx: SimCParser.ReplDeclarationContext): LLVMValueRef? {
+        val declaration = ctx.declaration()
+        when (declaration) {
+            is SimCParser.VariableDeclarationContext -> {
+                val type = getLLVMType(declaration.typeSpecifier())
+                val name = declaration.Identifier().text
+                val pointer = LLVMAddGlobal(module, type, name)
+                LLVMSetLinkage(pointer, LLVMCommonLinkage)
+                LLVMSetInitializer(pointer, LLVMConstNull(type))
+                namesChain.top()[name] = pointer
+            }
+            is SimCParser.ArrayDeclarationContext -> {
+                val baseType = getLLVMType(declaration.typeSpecifier())
+                val name = declaration.Identifier().text
+                val size = declaration.Constant().text.toInt()
+                val arrayType = LLVMArrayType(baseType, size)
+                val array = LLVMAddGlobal(module, arrayType, name)
+                LLVMSetLinkage(array, LLVMCommonLinkage)
+                LLVMSetInitializer(array, LLVMConstNull(arrayType))
+                namesChain.top()[name] = array
+            }
+            is SimCParser.VariableInitializeDeclarationContext -> {
+                throw Exception("cannot initialize global variable")
+            }
+            is SimCParser.FunctionDeclarationContext -> {
+                throw Exception("do not support external function declaration in REPL")
+            }
+            else -> {
+                throw Exception("unknown context")
+            }
+        }
+        return null
+    }
+
+    override fun visitReplExpression(ctx: SimCParser.ReplExpressionContext): LLVMValueRef? {
+        val functionType = LLVMFunctionType(LLVMInt32Type(),
+                PointerPointer(*emptyArray<LLVMTypeRef>()),
+                0, 0)
+        val anonymousFunction = LLVMAddFunction(module, "anonymous", functionType)
+
+        currentBlockHasRet = false
+        val entry = LLVMAppendBasicBlock(anonymousFunction, "entry")
+        LLVMPositionBuilderAtEnd(builder, entry)
+
+        var ret = visit(ctx.expression())
+        anonymousType = LLVMTypeOf(ret)
+        ret = when (LLVMGetTypeKind(anonymousType)) {
+            LLVMIntegerTypeKind -> {
+                LLVMBuildIntCast(builder, ret, LLVMInt32Type(), "to_i32")
+            }
+            LLVMPointerTypeKind -> {
+                LLVMBuildPointerCast(builder, ret, LLVMInt32Type(), "to_i32")
+            }
+            LLVMArrayTypeKind -> {
+                val array = getVariablePointerByName(ctx.text)
+                val indices = arrayOf(LLVMConstInt(LLVMInt32Type(), 0, 0), LLVMConstInt(LLVMInt32Type(), 0, 0))
+                val indexed = LLVMBuildInBoundsGEP(builder, array, PointerPointer(*indices), indices.size, "arr_ptr")
+                LLVMBuildIntCast(builder, LLVMBuildLoad(builder, indexed, "load_0_index"), LLVMInt32Type(), "to_i32")
+            }
+            else -> {
+                throw Exception("unknown type")
+            }
+        }
+
+        if (!currentBlockHasRet) {
+            LLVMBuildRet(builder, ret)
+            currentBlockHasRet = true
+        }
+
+        anonymousRef = anonymousFunction
+
+        LLVMRunFunctionPassManager(functionPassManager, anonymousFunction)
+        LLVMVerifyFunction(anonymousFunction, LLVMPrintMessageAction)
+        return null
     }
 
     override fun visitStringConstantExpr(ctx: SimCParser.StringConstantExprContext): LLVMValueRef? {
@@ -613,6 +767,9 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
                 LLVMSetLinkage(array, LLVMCommonLinkage)
                 LLVMSetInitializer(array, LLVMConstNull(arrayType))
                 namesChain.top()[name] = array
+            }
+            is SimCParser.VariableInitializeDeclarationContext -> {
+                throw Exception("cannot initialize global variable")
             }
             else -> {
                 visit(ctx.declaration())

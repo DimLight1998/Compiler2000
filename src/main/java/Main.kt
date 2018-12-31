@@ -5,9 +5,12 @@ import java.io.BufferedReader
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStreamReader
+import java.lang.Exception
+import java.lang.StringBuilder
 
 
 object Main {
+
     @JvmStatic
     fun main(args: Array<String>) {
 
@@ -18,6 +21,8 @@ object Main {
         ops.addOption(noExecutable)
         val showHelp = Option("h", "help", false, "show this help information")
         ops.addOption(showHelp)
+        val interactive = Option("i", "interact", false, "enable interactive mode")
+        ops.addOption(interactive)
         val cmdParser = DefaultParser()
         val formatter = HelpFormatter()
 
@@ -44,42 +49,79 @@ object Main {
         }
 
 
-        val inputStream = if (inputFile == null) {
-            System.`in`
-        } else {
-            FileInputStream(inputFile)
-        }
+        if (!cmd.hasOption("i")) {
+            val inputStream = if (inputFile == null) {
+                System.`in`
+            } else {
+                FileInputStream(inputFile)
+            }
 
-        val lexer = SimCLexer(ANTLRInputStream(inputStream))
-        val tokenStream = CommonTokenStream(lexer)
-        val parser = SimCParser(tokenStream)
-        val tree = parser.compilationUnit()
-        val codeGenVisitor = SimCCodeGenVisitor()
-        codeGenVisitor.initPassManagers()
-        codeGenVisitor.visit(tree)
-        codeGenVisitor.writeIRCodeTo(File("tests/ir.ll").path)
-        codeGenVisitor.writeBitCodeTo(File("tests/bitCode.bc").path)
-        codeGenVisitor.dispose()
-        val dirFile = if (inputFile == null) {
-            File(".")
+            val lexer = SimCLexer(ANTLRInputStream(inputStream))
+            val tokenStream = CommonTokenStream(lexer)
+            val parser = SimCParser(tokenStream)
+            val tree = parser.compilationUnit()
+            val codeGenVisitor = SimCCodeGenVisitor()
+            codeGenVisitor.init()
+            codeGenVisitor.visit(tree)
+            codeGenVisitor.writeIRCodeTo(File("tests/ir.ll").path)
+            codeGenVisitor.writeBitCodeTo(File("tests/bitCode.bc").path)
+            codeGenVisitor.dispose()
+            val dirFile = if (inputFile == null) {
+                File(".")
+            } else {
+                File(inputFile).parentFile
+            }
+            if (!cmd.hasOption("n")) {
+                var process = Runtime.getRuntime().exec("llc -relocation-model=pic bitCode.bc", null, dirFile)
+                var externalReader = BufferedReader(InputStreamReader(process.inputStream))
+                while (true) {
+                    val line: String = externalReader.readLine() ?: break
+                    println(line)
+                }
+                process.waitFor()
+                process = Runtime.getRuntime().exec("gcc bitCode.s -o $fileName", null, dirFile)
+                externalReader = BufferedReader(InputStreamReader(process.inputStream))
+                while (true) {
+                    val line: String = externalReader.readLine() ?: break
+                    println(line)
+                }
+                process.waitFor()
+            }
         } else {
-            File(inputFile).parentFile
-        }
-        if (!cmd.hasOption("n")) {
-            var process = Runtime.getRuntime().exec("llc -relocation-model=pic bitCode.bc", null, dirFile)
-            var externalReader = BufferedReader(InputStreamReader(process.inputStream))
+            val codeGenVisitor = SimCCodeGenVisitor()
+            codeGenVisitor.init()
+            codeGenVisitor.initRepl()
+            var line: String?
+            val buffer = StringBuilder()
             while (true) {
-                val line: String = externalReader.readLine() ?: break
-                println(line)
+                if (buffer.isEmpty()) {
+                    print("c2k> ")
+                } else {
+                    print("> ")
+                }
+                line = readLine()
+                if (line == null) {
+                    codeGenVisitor.dispose()
+                    break
+                } else if (line == "") {
+                    try {
+                        val lexer = SimCLexer(ANTLRInputStream(buffer.toString()))
+                        val tokenStream = CommonTokenStream(lexer)
+                        val parser = SimCParser(tokenStream)
+                        val tree = parser.replEntrance()
+                        codeGenVisitor.clearFunction()
+                        codeGenVisitor.visit(tree)
+                        if (codeGenVisitor.hasFunction()) {
+                            println(codeGenVisitor.runOutput())
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                    buffer.clear()
+                } else {
+                    buffer.append(line)
+                }
             }
-            process.waitFor()
-            process = Runtime.getRuntime().exec("gcc bitCode.s -o $fileName", null, dirFile)
-            externalReader = BufferedReader(InputStreamReader(process.inputStream))
-            while (true) {
-                val line: String = externalReader.readLine() ?: break
-                println(line)
-            }
-            process.waitFor()
         }
     }
 }

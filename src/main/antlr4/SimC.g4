@@ -75,6 +75,11 @@ externalDeclaration:
     functionDefinition # externalFunctionDefinition
     | declaration      # externalNonFunctionDefinition;
 
+replEntrance:
+    functionDefinition                              # replFunctionDefinition
+    | declaration                                   # replDeclaration
+    | expression                                    # replExpression;
+
 functionDefinition:
     functionSignature '{' blockItemList? '}' # functionFullDefinition;
 
