@@ -115,11 +115,97 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
 
     override fun visitLogicalAndExpr(ctx: SimCParser.LogicalAndExprContext): LLVMValueRef? {
         var lhs = visit(ctx.expression(0))
-        var rhs = visit(ctx.expression(1))
+        lhs = LLVMBuildICmp(builder, LLVMIntNE, lhs, LLVMConstInt(LLVMTypeOf(lhs), 0, 0), "to_i1")
+        val function = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder))
+        val positiveBB = LLVMAppendBasicBlock(function, "then")
+        val negativeBB = LLVMAppendBasicBlock(function, "else")
+        val mergeBB = LLVMAppendBasicBlock(function, "end_if")
+        val retPointer = LLVMBuildAlloca(builder, LLVMInt32Type(), "logic_and_temp")
+        if (!currentBlockHasRet) {
+            LLVMBuildCondBr(builder, lhs, positiveBB, negativeBB)
+        }
 
-        lhs = LLVMBuildIntCast(builder, lhs, LLVMInt32Type(), "cast_lhs")
-        rhs = LLVMBuildIntCast(builder, rhs, LLVMInt32Type(), "cast_rhs")
+        currentBlockHasRet = false
+        LLVMPositionBuilderAtEnd(builder, positiveBB)
+
+        var rhs = visit(ctx.expression(1))
+        rhs = LLVMBuildICmp(builder, LLVMIntNE, rhs, LLVMConstInt(LLVMTypeOf(rhs), 0, 0), "to_i1")
+        rhs = LLVMBuildSelect(builder, rhs, LLVMConstInt(LLVMInt32Type(), 1, 0), LLVMConstInt(LLVMInt32Type(), 0, 0), "select_rhs")
+        LLVMBuildStore(builder, rhs, retPointer)
+
+        if (!currentBlockHasRet) {
+            LLVMBuildBr(builder, mergeBB)
+        }
+
+        currentBlockHasRet = false
+        LLVMPositionBuilderAtEnd(builder, negativeBB)
+
+        lhs = LLVMBuildSelect(builder, lhs, LLVMConstInt(LLVMInt32Type(), 1, 0), LLVMConstInt(LLVMInt32Type(), 0, 0), "select_lhs")
+        LLVMBuildStore(builder, lhs, retPointer)
+
+        if (!currentBlockHasRet) {
+            LLVMBuildBr(builder, mergeBB)
+        }
+
+        currentBlockHasRet = false
+        LLVMPositionBuilderAtEnd(builder, mergeBB)
+
+        return LLVMBuildLoad(builder, retPointer, "ret_load")
+    }
+
+
+    override fun visitLogicalOrExpr(ctx: SimCParser.LogicalOrExprContext): LLVMValueRef? {
+        var lhs = visit(ctx.expression(0))
+        lhs = LLVMBuildICmp(builder, LLVMIntNE, lhs, LLVMConstInt(LLVMTypeOf(lhs), 0, 0), "to_i1")
+        val function = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder))
+        val positiveBB = LLVMAppendBasicBlock(function, "then")
+        val negativeBB = LLVMAppendBasicBlock(function, "else")
+        val mergeBB = LLVMAppendBasicBlock(function, "end_if")
+        val retPointer = LLVMBuildAlloca(builder, LLVMInt32Type(), "logic_or_temp")
+        if (!currentBlockHasRet) {
+            LLVMBuildCondBr(builder, lhs, positiveBB, negativeBB)
+        }
+
+        currentBlockHasRet = false
+        LLVMPositionBuilderAtEnd(builder, positiveBB)
+
+        lhs = LLVMBuildSelect(builder, lhs, LLVMConstInt(LLVMInt32Type(), 1, 0), LLVMConstInt(LLVMInt32Type(), 0, 0), "select_lhs")
+        LLVMBuildStore(builder, lhs, retPointer)
+
+        if (!currentBlockHasRet) {
+            LLVMBuildBr(builder, mergeBB)
+        }
+
+        currentBlockHasRet = false
+        LLVMPositionBuilderAtEnd(builder, negativeBB)
+
+        var rhs = visit(ctx.expression(1))
+        rhs = LLVMBuildICmp(builder, LLVMIntNE, rhs, LLVMConstInt(LLVMTypeOf(rhs), 0, 0), "to_i1")
+        rhs = LLVMBuildSelect(builder, rhs, LLVMConstInt(LLVMInt32Type(), 1, 0), LLVMConstInt(LLVMInt32Type(), 0, 0), "select_rhs")
+        LLVMBuildStore(builder, rhs, retPointer)
+
+        if (!currentBlockHasRet) {
+            LLVMBuildBr(builder, mergeBB)
+        }
+
+        currentBlockHasRet = false
+        LLVMPositionBuilderAtEnd(builder, mergeBB)
+
+        return LLVMBuildLoad(builder, retPointer, "ret_load")
+    }
+
+    override fun visitBitAndExpr(ctx: SimCParser.BitAndExprContext): LLVMValueRef? {
+        val lhs = visit(ctx.expression(0))
+        val rhs = visit(ctx.expression(1))
+
         return LLVMBuildAnd(builder, lhs, rhs, "and_tmp")
+    }
+
+    override fun visitBitOrExpr(ctx: SimCParser.BitOrExprContext): LLVMValueRef? {
+        val lhs = visit(ctx.expression(0))
+        val rhs = visit(ctx.expression(1))
+
+        return LLVMBuildOr(builder, lhs, rhs, "or_tmp")
     }
 
     override fun visitArrayIndexerExpr(ctx: SimCParser.ArrayIndexerExprContext): LLVMValueRef? {
@@ -149,21 +235,16 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
         return LLVMConstInt(LLVMInt32Type(), value, 1)
     }
 
-    override fun visitLogicalOrExpr(ctx: SimCParser.LogicalOrExprContext): LLVMValueRef? {
-        var lhs = visit(ctx.expression(0))
-        var rhs = visit(ctx.expression(1))
-
-        lhs = LLVMBuildIntCast(builder, lhs, LLVMInt32Type(), "cast_lhs")
-        rhs = LLVMBuildIntCast(builder, rhs, LLVMInt32Type(), "cast_rhs")
-        return LLVMBuildOr(builder, lhs, rhs, "or_tmp")
-    }
-
     override fun visitUnaryOpExpr(ctx: SimCParser.UnaryOpExprContext): LLVMValueRef? {
         val operand = visit(ctx.expression())
         return when (ctx.op.text) {
             "+" -> operand
             "-" -> LLVMBuildNeg(builder, operand, "neg_tmp")
-            "!" -> LLVMBuildNot(builder, operand, "not_tmp")
+            "~" -> LLVMBuildNot(builder, operand, "not_tmp")
+            "!" -> {
+                val condition = LLVMBuildICmp(builder, LLVMIntNE, operand, LLVMConstInt(LLVMTypeOf(operand), 0, 0), "to_i1")
+                LLVMBuildSelect(builder, condition, LLVMConstInt(LLVMInt32Type(), 0, 0), LLVMConstInt(LLVMInt32Type(), 1, 0), "not_select")
+            }
             else -> throw Exception("unknown op")
         }
     }

@@ -4,28 +4,24 @@ char *memset(char *addr, int value, int size);
 
 int StringLength(char *str)
 {
-    int len;
-    len = 0;
-    while (str[len] != 0)
+    int len = 0;
+    while (str[len])
     {
-        len = len + 1;
+        len++;
     }
     return len;
 }
 
 int ComputeNext(int *next, char *str)
 {
-    int length;
-    length = StringLength(str);
+    int length = StringLength(str);
     if (length == 0)
         return 1;
     next[0] = 0;
-    int p;
-    p = 1;
-    for (p = 1; p < length; p = p + 1)
+    int p = 1;
+    for (p = 1; p < length; p++)
     {
-        int k;
-        k = next[p - 1];
+        int k = next[p - 1];
         while (k > 0 && str[k] != str[p])
         {
             k = next[k - 1];
@@ -55,33 +51,28 @@ int main()
     printf("Please input the pattern string (shorter than 2^10 chars):\n");
     scanf("%1023[^\n]%*c", pattern);
 
-    int patternLength;
-    patternLength = StringLength(pattern);
+    int patternLength = StringLength(pattern);
     if (ComputeNext(next, pattern) != 0)
     {
         printf("Pattern is empty!\n");
         return 1;
     }
-    int sourceLength;
-    sourceLength = StringLength(source);
+    int sourceLength = StringLength(source);
     if (sourceLength == 0)
     {
         printf("Source is empty!\n");
         return 1;
     }
 
-    int s;
-    s = 0;
-    int p;
-    p = 0;
-    int found;
-    found = 0;
+    int s = 0;
+    int p = 0;
+    int found = 0;
     while (s < sourceLength && p < patternLength)
     {
         while (s < sourceLength && p < patternLength && source[s] == pattern[p])
         {
-            s = s + 1;
-            p = p + 1;
+            s++;
+            p++;
         }
 
         if (p == patternLength)
@@ -95,7 +86,7 @@ int main()
         {
             if (p == 0)
             {
-                s = s + 1;
+                s++;
             }
             else
             {

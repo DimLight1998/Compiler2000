@@ -1,7 +1,10 @@
 import org.antlr.v4.runtime.ANTLRInputStream
 import org.antlr.v4.runtime.CommonTokenStream
+import java.io.BufferedReader
 import java.io.File
 import java.io.FileInputStream
+import java.io.InputStreamReader
+
 
 object Main {
     @JvmStatic
@@ -26,5 +29,25 @@ object Main {
         codeGenVisitor.writeIRCodeTo(File("tests/ir.ll").path)
         codeGenVisitor.writeBitCodeTo(File("tests/bitCode.bc").path)
         codeGenVisitor.dispose()
+        val dirFile = if (inputFile == null) {
+            File(".")
+        } else {
+            File(inputFile).parentFile
+        }
+        val fileName = "output" // todo
+        var process = Runtime.getRuntime().exec("llc -relocation-model=pic bitCode.bc", null, dirFile)
+        var externalReader = BufferedReader(InputStreamReader(process.inputStream))
+        while (true) {
+            val line: String = externalReader.readLine() ?: break
+            println(line)
+        }
+        process.waitFor()
+        process = Runtime.getRuntime().exec("gcc bitCode.s -o $fileName", null, dirFile)
+        externalReader = BufferedReader(InputStreamReader(process.inputStream))
+        while (true) {
+            val line: String = externalReader.readLine() ?: break
+            println(line)
+        }
+        process.waitFor()
     }
 }

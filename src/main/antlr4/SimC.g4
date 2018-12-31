@@ -13,12 +13,14 @@ expression:
     | Identifier '(' arguments? ')'                                # functionCallExpr
     | Identifier op = ('++' | '--')                                # suffixUnaryOpExpr
     | op = ('++' | '--') Identifier                                # prefixUnaryOpExpr
-    | op = ('+' | '-' | '!') expression                            # unaryOpExpr
+    | op = ('+' | '-' | '!' | '~') expression                      # unaryOpExpr
     | expression op = ('*' | '/' | '%') expression                 # mulDivExpr
     | expression op = ('+' | '-') expression                       # addSubExpr
     | expression op = ('<<' | '>>') expression                     # lshRshExpr
     | expression op = ('<' | '>' | '<=' | '>=') expression         # orderExpr
     | expression op = ('==' | '!=') expression                     # equalityExpr
+    | expression '&' expression                                    # bitAndExpr
+    | expression '|' expression                                    # bitOrExpr
     | expression '&&' expression                                   # logicalAndExpr
     | expression '||' expression                                   # logicalOrExpr
     | <assoc = right> Identifier '=' expression                    # assignmentExpr
