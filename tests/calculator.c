@@ -3,11 +3,10 @@ int scanf(char *format, ...);
 
 int StringLength(char *str)
 {
-    int len;
-    len = 0;
-    while (str[len] != 0)
+    int len = 0;
+    while (str[len])
     {
-        len = len + 1;
+        len++;
     }
     return len;
 }
@@ -75,25 +74,20 @@ int BinCalc(char op, int lhs, int rhs)
 int main()
 {
     int numStack[1024];
-    int numStackSize;
-    numStackSize = 0;
+    int numStackSize = 0;
 
     char opStack[1024];
-    int opStackSize;
-    opStackSize = 0;
+    int opStackSize = 0;
 
     char buffer[65536];
     printf("Please input the string to calculate (shorter than 2^16 chars):\n");
     scanf("%[^\n]", buffer);
 
-    int bufferLength;
-    bufferLength = StringLength(buffer);
-    int pos;
-    pos = 0;
-    for (pos = 0; pos < bufferLength; pos = pos + 1)
+    int bufferLength = StringLength(buffer);
+    int pos = 0;
+    for (pos = 0; pos < bufferLength; pos++)
     {
-        char curr;
-        curr = buffer[pos];
+        char curr = buffer[pos];
         if (IsSpace(curr))
         {
         }
@@ -105,14 +99,12 @@ int main()
             }
             else
             {
-                numStack[numStackSize] = curr - 48;
-                numStackSize = numStackSize + 1;
+                numStack[numStackSize++] = curr - 48;
             }
         }
         else
         {
-            int precedence;
-            precedence = GetOpPrecedence(curr);
+            int precedence = GetOpPrecedence(curr);
             if (precedence == -1)
             {
                 printf("Error, unexpected operator.\n");
@@ -123,8 +115,7 @@ int main()
                 curr != 41 &&
                 (opStackSize == 0 || GetOpPrecedence(opStack[opStackSize - 1]) < precedence || curr == 40))
             {
-                opStack[opStackSize] = curr;
-                opStackSize = opStackSize + 1;
+                opStack[opStackSize++] = curr;
             }
             else
             {
@@ -132,24 +123,18 @@ int main()
                     (curr == 41 && opStack[opStackSize - 1] != 40) ||
                     (curr != 41 && opStackSize != 0 && GetOpPrecedence(opStack[opStackSize - 1]) >= precedence))
                 {
-                    char topOp;
-                    topOp = opStack[opStackSize - 1];
-                    opStackSize = opStackSize - 1;
-                    int rhs;
-                    rhs = numStack[numStackSize - 1];
-                    int lhs;
-                    lhs = numStack[numStackSize - 2];
-                    numStack[numStackSize - 2] = BinCalc(topOp, lhs, rhs);
-                    numStackSize = numStackSize - 1;
+                    char topOp = opStack[--opStackSize];
+                    int rhs = numStack[--numStackSize];
+                    int lhs = numStack[--numStackSize];
+                    numStack[numStackSize++] = BinCalc(topOp, lhs, rhs);
                 }
                 if (curr == 41)
                 {
-                    opStackSize = opStackSize - 1;
+                    opStackSize--;
                 }
                 else
                 {
-                    opStack[opStackSize] = curr;
-                    opStackSize = opStackSize + 1;
+                    opStack[opStackSize++] = curr;
                 }
             }
         }
@@ -157,15 +142,10 @@ int main()
 
     while (numStackSize > 1)
     {
-        char topOp;
-        topOp = opStack[opStackSize - 1];
-        opStackSize = opStackSize - 1;
-        int rhs;
-        rhs = numStack[numStackSize - 1];
-        int lhs;
-        lhs = numStack[numStackSize - 2];
-        numStack[numStackSize - 2] = BinCalc(topOp, lhs, rhs);
-        numStackSize = numStackSize - 1;
+        char topOp = opStack[--opStackSize];
+        int rhs = numStack[--numStackSize];
+        int lhs = numStack[--numStackSize];
+        numStack[numStackSize++] = BinCalc(topOp, lhs, rhs);
     }
 
     printf("%d\n", numStack[0]);
