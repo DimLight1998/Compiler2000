@@ -56,6 +56,11 @@ object Main {
                 FileInputStream(inputFile)
             }
 
+            val dirFile = if (inputFile == null) {
+                File(".")
+            } else {
+                File(inputFile).parentFile
+            }
             val lexer = SimCLexer(ANTLRInputStream(inputStream))
             val tokenStream = CommonTokenStream(lexer)
             val parser = SimCParser(tokenStream)
@@ -63,24 +68,19 @@ object Main {
             val codeGenVisitor = SimCCodeGenVisitor()
             codeGenVisitor.init()
             codeGenVisitor.visit(tree)
-            codeGenVisitor.writeIRCodeTo(File("tests/ir.ll").path)
-            codeGenVisitor.writeBitCodeTo(File("tests/bitCode.bc").path)
+            codeGenVisitor.writeIRCodeTo(dirFile.resolve("$fileName.ll").path)
+            codeGenVisitor.writeBitCodeTo(dirFile.resolve("$fileName.bc").path)
             codeGenVisitor.dispose()
-            val dirFile = if (inputFile == null) {
-                File(".")
-            } else {
-                File(inputFile).parentFile
-            }
             if (!cmd.hasOption("n")) {
-                var process = Runtime.getRuntime().exec("llc -relocation-model=pic bitCode.bc", null, dirFile)
-                var externalReader = BufferedReader(InputStreamReader(process.inputStream))
+                var process = Runtime.getRuntime().exec("llc -relocation-model=pic $fileName.bc", null, dirFile)
+                var externalReader = BufferedReader(InputStreamReader(process.errorStream))
                 while (true) {
                     val line: String = externalReader.readLine() ?: break
                     println(line)
                 }
                 process.waitFor()
-                process = Runtime.getRuntime().exec("gcc bitCode.s -o $fileName", null, dirFile)
-                externalReader = BufferedReader(InputStreamReader(process.inputStream))
+                process = Runtime.getRuntime().exec("gcc $fileName.s -o $fileName", null, dirFile)
+                externalReader = BufferedReader(InputStreamReader(process.errorStream))
                 while (true) {
                     val line: String = externalReader.readLine() ?: break
                     println(line)
