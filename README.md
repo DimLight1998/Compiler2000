@@ -10,6 +10,11 @@ c2k使用ANTLR4作为词法和语法解析工具，LLVM为中间代码生成，�
 
 还有一些其他测试语法功能的C程序可以在`tests`文件夹找到。
 
+- `testassign.c`测试连续赋值
+- `testlogicbit.c`测试逻辑运算符是否能短路运算
+- `testunaryop.c`测试自增减运算符
+- `testvoidret.c`测试void函数和全局变量定义是否正常工作
+
 ## 使用说明
 
 ```bash
