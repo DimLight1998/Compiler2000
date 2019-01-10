@@ -5,6 +5,7 @@ misc
 .idea
 *.s
 target/
+out/
 
 SimC.interp
 SimC.tokens
