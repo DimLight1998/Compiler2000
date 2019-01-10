@@ -17,6 +17,14 @@ c2k使用ANTLR4作为词法和语法解析工具，LLVM为中间代码生成，�
 
 ## 使用说明
 
+### 构建
+
+安装llvm、maven、gcc、antlr。
+
+在项目文件夹下使用mvn compile进行编译，maven会自动下载安装依赖库。
+
+### 命令行使用
+
 ```bash
 usage: c2k [options] [input file]
  -h,--help           show this help information
