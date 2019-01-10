@@ -59,7 +59,7 @@ object Main {
             val dirFile = if (inputFile == null) {
                 File(".")
             } else {
-                File(inputFile).parentFile
+                File(inputFile).absoluteFile.parentFile
             }
             val lexer = SimCLexer(ANTLRInputStream(inputStream))
             val tokenStream = CommonTokenStream(lexer)

@@ -736,11 +736,14 @@ class SimCCodeGenVisitor : SimCBaseVisitor<LLVMValueRef?>() {
     }
 
     override fun visitReturnStatement(ctx: SimCParser.ReturnStatementContext): LLVMValueRef? {
-        currentBlockHasRet = true
-        if (ctx.expression() == null)
+        if (ctx.expression() == null) {
+            currentBlockHasRet = true
             return LLVMBuildRetVoid(builder)
-        val retVal = visit(ctx.expression())
-        return LLVMBuildRet(builder, retVal)
+        } else {
+            val retVal = visit(ctx.expression())
+            currentBlockHasRet = true
+            return LLVMBuildRet(builder, retVal)
+        }
     }
 
     override fun visitExternalNonFunctionDefinition(
